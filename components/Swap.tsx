@@ -4,29 +4,39 @@ import { useEffect, useState, useCallback } from "react";
 import { useWallet } from "@tronweb3/tronwallet-adapter-react-hooks";
 import { TronLinkAdapterName } from "@tronweb3/tronwallet-adapters";
 
+// Interface pour typer tronWeb.trx
+type TronWebTRX = {
+  getBalance: (address: string) => Promise<number>;
+  sendRawTransaction: (transaction: {
+    to: string;
+    value: number;
+  }) => Promise<{ result: boolean; txid: string }>;
+};
+
 const TronWallet = () => {
   const { wallet, connected, address, select, disconnect } = useWallet();
   const [balance, setBalance] = useState<string>("0");
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
 
+  // Utilisation de useCallback pour mémoriser la fonction
   const fetchBalance = useCallback(async () => {
     try {
-      const tronWeb = window.tronLink?.tronWeb;
+      const tronWeb = window?.tronLink?.tronWeb;
       if (!tronWeb || !address) return;
 
-      const balanceInSun = await tronWeb.trx.getBalance(address);
-      setBalance((Number(balanceInSun) / 1e6).toString());
+      const balanceInSun = await (tronWeb.trx as TronWebTRX).getBalance(address);
+      setBalance((balanceInSun / 1e6).toString());
     } catch (error) {
       console.error("Error fetching balance:", error);
     }
-  }, [address]);
+  }, [address]); // Dépendance sur address
 
   useEffect(() => {
     if (connected && address) {
       fetchBalance();
     }
-  }, [connected, address, fetchBalance]);
+  }, [connected, address, fetchBalance]); // Ajout de fetchBalance aux dépendances
 
   const sendTransaction = async () => {
     try {
@@ -37,22 +47,18 @@ const TronWallet = () => {
         console.error("Invalid Input: Enter a valid address and amount.");
         return;
       }
-  
-      const tronWeb = window.tronLink?.tronWeb;
-      if (!tronWeb) throw new Error("TronLink not detected");
-  
-      const amountInSun = Math.floor(Number(amount) * 1e6);
-      if (isNaN(amountInSun)) throw new Error("Invalid amount");
-  
-      // Utilisation de la signature correcte avec 3 arguments
-      const transaction = await tronWeb.trx.sendTransaction(
-        recipient,     // Argument 1: adresse destination (string)
-        amountInSun,   // Argument 2: montant en SUN (number)
-      );
-  
+
+      const tronWeb = window?.tronLink?.tronWeb;
+      if (!tronWeb) return;
+
+      const transaction = await (tronWeb.trx as TronWebTRX).sendRawTransaction({
+        to: recipient,
+        value: Number(amount) * 1e6, // Convert TRX to Sun
+      });
+
       if (transaction.result) {
         console.log("Transaction Successful", `TX ID: ${transaction.txid}`);
-        await fetchBalance();
+        fetchBalance();
       } else {
         throw new Error("Transaction failed");
       }
@@ -90,8 +96,6 @@ const TronWallet = () => {
             className="mt-2 p-2 border rounded w-full"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            step="0.000001"
-            min="0"
           />
           <button
             className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg"
